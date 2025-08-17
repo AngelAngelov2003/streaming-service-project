@@ -194,6 +194,15 @@ const Account = () => {
           </button>
         )}
 
+        {currentUser?.email === "admin@gmail.com" && (
+          <button
+            onClick={() => navigate("/admin")}
+            className="w-full flex items-center justify-center p-3 rounded-lg bg-yellow-600 text-white font-bold text-lg hover:bg-yellow-500 transition-colors duration-200 transform hover:scale-105 shadow-lg mt-4"
+          >
+            Go to Admin Panel
+          </button>
+        )}
+
         <button
           onClick={handleLogout}
           className="w-full flex items-center justify-center p-3 rounded-lg bg-gray-700 text-white font-bold text-lg hover:bg-gray-600 transition-colors duration-200 transform hover:scale-105 shadow-lg mt-4"
