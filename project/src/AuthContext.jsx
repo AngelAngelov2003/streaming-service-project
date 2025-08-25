@@ -1,9 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import {
   onAuthStateChanged,
   signOut,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -15,53 +18,78 @@ export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [subscriptionPlan, setSubscriptionPlan] = useState(null);
+  const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const signup = (email, password) => {
-    return createUserWithEmailAndPassword(auth, email, password).then(
-      async (userCredential) => {
-        const user = userCredential.user;
-        await setDoc(
-          doc(db, 'users', user.uid),
-          {
-            email: user.email,
-            subscriptionStatus: 'inactive',
-            subscriptionPlan: null,
-          },
-          { merge: true }
-        );
-        return userCredential;
-      }
-    );
+  const signup = async (email, password) => {
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      await setDoc(
+        doc(db, 'users', user.uid),
+        { email: user.email, subscriptionStatus: 'inactive', subscriptionPlan: null, role: 'user' },
+        { merge: true }
+      );
+      toast.success('Signup successful');
+      return userCredential;
+    } catch (err) {
+      toast.error(err.message || 'Signup failed');
+      throw err;
+    }
   };
 
-  const login = (email, password) => signInWithEmailAndPassword(auth, email, password);
-  const logout = () => signOut(auth);
+  const login = async (email, password) => {
+    try {
+      const res = await signInWithEmailAndPassword(auth, email, password);
+      toast.success('Login successful');
+      return res;
+    } catch (err) {
+      toast.error(err.message || 'Login failed');
+      throw err;
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await signOut(auth);
+      toast.success('Logged out successfully');
+    } catch (err) {
+      toast.error(err.message || 'Logout failed');
+    }
+  };
+
+  const resetPassword = async (email) => {
+    try {
+      await sendPasswordResetEmail(auth, email);
+      toast.success('Password reset email sent');
+    } catch (err) {
+      toast.error(err.message || 'Failed to send reset email');
+      throw err;
+    }
+  };
 
   const subscribeToPlan = async (planId) => {
-    if (!currentUser) throw new Error('No user');
-    const userDocRef = doc(db, 'users', currentUser.uid);
-    await setDoc(
-      userDocRef,
-      {
-        subscriptionPlan: planId,       
-        subscriptionStatus: 'active',
-      },
-      { merge: true }
-    );
+    try {
+      if (!currentUser) throw new Error('No user logged in');
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      await setDoc(userDocRef, { subscriptionPlan: planId, subscriptionStatus: 'active' }, { merge: true });
+      toast.success('Subscribed successfully');
+    } catch (err) {
+      toast.error(err.message || 'Failed to subscribe');
+      throw err;
+    }
   };
 
   const unsubscribeFromPlan = async () => {
-    if (!currentUser) throw new Error('No user');
-    const userDocRef = doc(db, 'users', currentUser.uid);
-    await setDoc(
-      userDocRef,
-      {
-        subscriptionPlan: null,
-        subscriptionStatus: 'inactive',
-      },
-      { merge: true }
-    );
+    try {
+      if (!currentUser) throw new Error('No user logged in');
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      await setDoc(userDocRef, { subscriptionPlan: null, subscriptionStatus: 'inactive' }, { merge: true });
+      toast.success('Unsubscribed successfully');
+    } catch (err) {
+      toast.error(err.message || 'Failed to unsubscribe');
+      throw err;
+    }
   };
 
   useEffect(() => {
@@ -69,50 +97,58 @@ export const AuthProvider = ({ children }) => {
       if (user) {
         setCurrentUser(user);
         const userDocRef = doc(db, 'users', user.uid);
-
-        const unsubscribeFirestore = onSnapshot(
-          userDocRef,
-          (docSnap) => {
-            if (docSnap.exists()) {
-              const data = docSnap.data();
-              setSubscriptionStatus(data.subscriptionStatus ?? 'inactive');
-              setSubscriptionPlan(data.subscriptionPlan ?? null);
-            } else {
-              setSubscriptionStatus('inactive');
-              setSubscriptionPlan(null);
+        let unsubscribeFirestore;
+        try {
+          unsubscribeFirestore = onSnapshot(
+            userDocRef,
+            (docSnap) => {
+              if (docSnap.exists()) {
+                const data = docSnap.data();
+                setSubscriptionStatus(data.subscriptionStatus ?? 'inactive');
+                setSubscriptionPlan(data.subscriptionPlan ?? null);
+                setRole(data.role ?? 'user');
+              } else {
+                setSubscriptionStatus('inactive');
+                setSubscriptionPlan(null);
+                setRole('user');
+              }
+              setLoading(false);
+            },
+            (err) => {
+              console.error('Firestore snapshot error:', err);
+              toast.error('Failed to load user data');
+              setLoading(false);
             }
-            setLoading(false);
-          },
-          (error) => {
-            console.error('Error fetching user data in real-time:', error);
-            setSubscriptionStatus('inactive');
-            setSubscriptionPlan(null);
-            setLoading(false);
-          }
-        );
-
-        return () => unsubscribeFirestore();
+          );
+        } catch (err) {
+          console.error('Firestore listener failed:', err);
+          toast.error('Failed to load user data');
+          setLoading(false);
+        }
+        return () => unsubscribeFirestore && unsubscribeFirestore();
       } else {
         setCurrentUser(null);
         setSubscriptionStatus(null);
         setSubscriptionPlan(null);
+        setRole(null);
         setLoading(false);
       }
     });
-
     return () => unsubscribeAuth();
   }, []);
 
   const value = {
     currentUser,
-    subscriptionStatus, 
-    subscriptionPlan,   
+    subscriptionStatus,
+    subscriptionPlan,
+    role,
     loading,
     signup,
     login,
     logout,
+    resetPassword,
     subscribeToPlan,
-    unsubscribeFromPlan,
+    unsubscribeFromPlan
   };
 
   return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;

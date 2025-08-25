@@ -1,8 +1,9 @@
 import React from 'react';
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import Header from './components/Header/Header';
 import Footer from './components/Footer/Footer';
+import Loader from './components/Loader/Loader';
 import Home from './pages/Home/Home.jsx';
 import TvShows from './pages/TvShows/TvShows.jsx';
 import Movies from './pages/Movies/Movies.jsx';
@@ -14,59 +15,52 @@ import SubscriptionPlans from './pages/SubscriptionPlans/SubscriptionPlans.jsx';
 import Account from './pages/Account/Account.jsx';
 import AdminPage from './pages/Admin/Admin.jsx';
 import Details from './pages/Details/Details.jsx';
+import { SearchProvider } from "./components/SearchContext/SearchContext.jsx";
+
 
 function App() {
-  const { currentUser, loading } = useAuth();
+  const { currentUser, role, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const RootRedirect = () => {
-    if (loading) {
-      return (
-        <div className="flex items-center justify-center min-h-screen text-lg text-white">
-          Loading...
-        </div>
-      );
-    }
-
-    if (currentUser) {
-      return <Home />;
-    }
-
+    if (loading) return <Loader />;
+    if (currentUser) return <Home />;
     React.useEffect(() => {
-      navigate('/login');
-    }, [navigate]);
-
+      navigate('/login', { state: { from: location.pathname } });
+    }, [navigate, location]);
     return null;
   };
 
   const ProtectedRoute = ({ children }) => {
-    if (loading) {
-      return (
-        <div className="flex items-center justify-center min-h-screen text-lg text-white">
-          Loading...
-        </div>
-      );
-    }
-
+    if (loading) return <Loader />;
     if (!currentUser) {
       React.useEffect(() => {
-        navigate('/login');
+        navigate('/login', { state: { from: location.pathname } });
+      }, [navigate, location]);
+      return null;
+    }
+    return children;
+  };
+
+  const AdminRoute = ({ children }) => {
+    if (loading) return <Loader />;
+    if (!currentUser || role !== 'admin') {
+      React.useEffect(() => {
+        navigate('/', { replace: true });
       }, [navigate]);
       return null;
     }
-
     return children;
   };
 
   return (
-    <>
+    <SearchProvider>
       {currentUser && <Header />}
-
       <main className="bg-[#141414] text-white pt-[64px] w-full min-h-screen font-inter">
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
-
           <Route
             path="/subscribe"
             element={
@@ -75,9 +69,7 @@ function App() {
               </ProtectedRoute>
             }
           />
-
           <Route path="/" element={<RootRedirect />} />
-
           <Route
             path="/tvshows"
             element={
@@ -118,16 +110,14 @@ function App() {
               </ProtectedRoute>
             }
           />
-
           <Route
             path="/admin"
             element={
-              <ProtectedRoute>
+              <AdminRoute>
                 <AdminPage />
-              </ProtectedRoute>
+              </AdminRoute>
             }
           />
-
           <Route
             path="/details/:id"
             element={
@@ -138,9 +128,8 @@ function App() {
           />
         </Routes>
       </main>
-
       {currentUser && <Footer />}
-    </>
+    </SearchProvider>
   );
 }
 
