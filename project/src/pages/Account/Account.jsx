@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../AuthContext';
 import { db } from '../../firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { User, Mail, DollarSign, LogOut, CheckCircle, XCircle } from 'lucide-react';
+import { User, Mail, DollarSign, LogOut, CheckCircle, XCircle, Smartphone } from 'lucide-react';
 import SubscriptionModal from '../../components/SubscriptionModal/SubscriptionModal';
 
 const Account = () => {
@@ -11,10 +11,12 @@ const Account = () => {
     currentUser,
     logout,
     loading,
-    subscriptionStatus,   
-    subscriptionPlan,    
+    subscriptionStatus,
+    subscriptionPlan,
+    remainingDevices,
+    remainingDays,
     subscribeToPlan,
-    unsubscribeFromPlan,
+    unsubscribeFromPlan
   } = useAuth();
 
   const [userData, setUserData] = useState(null);
@@ -38,17 +40,10 @@ const Account = () => {
       return;
     }
     const userDocRef = doc(db, 'users', currentUser.uid);
-    const unsubscribe = onSnapshot(
-      userDocRef,
-      (docSnap) => {
-        setUserData(docSnap.exists() ? docSnap.data() : null);
-        setLoadingData(false);
-      },
-      (error) => {
-        console.error('Error fetching user data: ', error);
-        setLoadingData(false);
-      }
-    );
+    const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+      setUserData(docSnap.exists() ? docSnap.data() : null);
+      setLoadingData(false);
+    });
     return () => unsubscribe();
   }, [currentUser]);
 
@@ -63,13 +58,9 @@ const Account = () => {
   const handleSubscribe = async (planId) => {
     try {
       await subscribeToPlan(planId);
-      setMessage({
-        type: 'success',
-        text: `You have successfully subscribed to the ${plans.find((p) => p.id === planId)?.name} plan.`,
-      });
+      setMessage({ type: 'success', text: `You have successfully subscribed to the ${plans.find((p) => p.id === planId)?.name} plan.` });
       setIsModalOpen(false);
     } catch (error) {
-      console.error('Error updating subscription:', error);
       setMessage({ type: 'error', text: 'Failed to update subscription. Please try again.' });
     }
   };
@@ -79,7 +70,6 @@ const Account = () => {
       await unsubscribeFromPlan();
       setMessage({ type: 'success', text: 'You have successfully unsubscribed.' });
     } catch (error) {
-      console.error('Error unsubscribing:', error);
       setMessage({ type: 'error', text: 'Failed to unsubscribe. Please try again.' });
     }
   };
@@ -115,11 +105,7 @@ const Account = () => {
         </div>
 
         {message.text && (
-          <div
-            className={`p-4 rounded-lg flex items-center gap-2 ${
-              message.type === 'success' ? 'bg-green-600' : 'bg-red-600'
-            }`}
-          >
+          <div className={`p-4 rounded-lg flex items-center gap-2 ${message.type === 'success' ? 'bg-green-600' : 'bg-red-600'}`}>
             {message.type === 'success' ? <CheckCircle size={20} /> : <XCircle size={20} />}
             <p className="text-white">{message.text}</p>
           </div>
@@ -135,15 +121,20 @@ const Account = () => {
           </div>
 
           {subscriptionStatus === 'active' && currentPlan && (
-            <div className="bg-[#2a2a2a] p-4 rounded-lg flex items-center space-x-4 shadow-md border-2 border-red-600">
-              <DollarSign size={24} className="text-red-500" />
-              <div>
-                <p className="text-sm text-gray-400">Current Subscription</p>
-                <div className="flex items-center gap-2">
-                  <p className="text-lg font-medium capitalize">{currentPlan.name} Plan</p>
-                  <CheckCircle size={20} className="text-green-500" />
-                </div>
-                <p className="text-gray-400 text-sm">{currentPlan.price}</p>
+            <div className="bg-[#2a2a2a] p-4 rounded-lg flex flex-col space-y-2 shadow-md border-2 border-red-600">
+              <div className="flex items-center gap-2">
+                <DollarSign size={24} className="text-red-500" />
+                <p className="text-lg font-medium capitalize">{currentPlan.name} Plan</p>
+                <CheckCircle size={20} className="text-green-500" />
+              </div>
+              <p className="text-gray-400 text-sm">{currentPlan.price}</p>
+              <div className="flex items-center gap-2">
+                <Smartphone size={18} className="text-red-500" />
+                <p className="text-gray-400 text-sm">Remaining Devices: {remainingDevices}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle size={18} className="text-red-500" />
+                <p className="text-gray-400 text-sm">Remaining Days: {remainingDays}</p>
               </div>
             </div>
           )}
@@ -153,71 +144,45 @@ const Account = () => {
           <h3 className="text-xl font-semibold text-white text-center">{optionsTitle}</h3>
           <div className="flex flex-col md:flex-row gap-4 justify-center">
             {availablePlans.map((plan) => (
-              <div
-                key={plan.id}
-                className="bg-[#2a2a2a] p-6 rounded-lg shadow-md flex-1 flex flex-col items-center transition-colors duration-200"
-              >
+              <div key={plan.id} className="bg-[#2a2a2a] p-6 rounded-lg shadow-md flex-1 flex flex-col items-center transition-colors duration-200">
                 <h2 className="text-2xl font-bold text-white mb-2 capitalize">{plan.name}</h2>
                 <p className="text-3xl font-extrabold text-white mb-4">{plan.price}</p>
                 <ul className="text-gray-400 text-left mb-6 w-full px-2">
                   {plan.features.map((feature, index) => (
                     <li key={index} className="flex items-center mt-2">
                       <svg className="w-4 h-4 mr-2 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                        <path
-                          fillRule="evenodd"
-                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                          clipRule="evenodd"
-                        />
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
                       </svg>
                       {feature}
                     </li>
                   ))}
                 </ul>
-                <button
-                  onClick={() => handleOpenModal(plan.id)}
-                  className="mt-auto w-full p-3 rounded-lg font-bold text-lg transition-colors duration-200 transform hover:scale-105 shadow-lg bg-red-600 hover:bg-red-700"
-                >
-                  Select
-                </button>
+                <button onClick={() => handleOpenModal(plan.id)} className="mt-auto w-full p-3 rounded-lg font-bold text-lg transition-colors duration-200 transform hover:scale-105 shadow-lg bg-red-600 hover:bg-red-700">Select</button>
               </div>
             ))}
           </div>
         </div>
 
         {subscriptionStatus === 'active' && (
-          <button
-            onClick={handleUnsubscribe}
-            className="w-full flex items-center justify-center p-3 rounded-lg bg-gray-700 text-white font-bold text-lg hover:bg-red-600 transition-colors duration-200 transform hover:scale-105 shadow-lg mt-4"
-          >
+          <button onClick={handleUnsubscribe} className="w-full flex items-center justify-center p-3 rounded-lg bg-gray-700 text-white font-bold text-lg hover:bg-red-600 transition-colors duration-200 transform hover:scale-105 shadow-lg mt-4">
             <XCircle size={20} className="mr-2" />
             Unsubscribe
           </button>
         )}
 
         {currentUser?.email === "admin@gmail.com" && (
-          <button
-            onClick={() => navigate("/admin")}
-            className="w-full flex items-center justify-center p-3 rounded-lg bg-yellow-600 text-white font-bold text-lg hover:bg-yellow-500 transition-colors duration-200 transform hover:scale-105 shadow-lg mt-4"
-          >
+          <button onClick={() => navigate("/admin")} className="w-full flex items-center justify-center p-3 rounded-lg bg-yellow-600 text-white font-bold text-lg hover:bg-yellow-500 transition-colors duration-200 transform hover:scale-105 shadow-lg mt-4">
             Go to Admin Panel
           </button>
         )}
 
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center justify-center p-3 rounded-lg bg-gray-700 text-white font-bold text-lg hover:bg-gray-600 transition-colors duration-200 transform hover:scale-105 shadow-lg mt-4"
-        >
+        <button onClick={handleLogout} className="w-full flex items-center justify-center p-3 rounded-lg bg-gray-700 text-white font-bold text-lg hover:bg-gray-600 transition-colors duration-200 transform hover:scale-105 shadow-lg mt-4">
           <LogOut size={20} className="mr-2" />
           Logout
         </button>
       </div>
 
-      <SubscriptionModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        plan={selectedPlan}
-        onSubscribe={handleSubscribe}
-      />
+      <SubscriptionModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} plan={selectedPlan} onSubscribe={handleSubscribe} />
     </div>
   );
 };

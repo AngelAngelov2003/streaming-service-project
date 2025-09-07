@@ -8,7 +8,7 @@ import {
   signInWithEmailAndPassword,
   sendPasswordResetEmail
 } from 'firebase/auth';
-import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, onSnapshot, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
 const AuthContext = createContext();
@@ -19,118 +19,119 @@ export const AuthProvider = ({ children }) => {
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
   const [subscriptionPlan, setSubscriptionPlan] = useState(null);
   const [role, setRole] = useState(null);
+  const [remainingDevices, setRemainingDevices] = useState(null);
+  const [remainingDays, setRemainingDays] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const planLimits = {
+    basic: 1,
+    standard: 2,
+    premium: 4
+  };
+
   const signup = async (email, password) => {
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      await setDoc(
-        doc(db, 'users', user.uid),
-        { email: user.email, subscriptionStatus: 'inactive', subscriptionPlan: null, role: 'user' },
-        { merge: true }
-      );
-      toast.success('Signup successful');
-      return userCredential;
-    } catch (err) {
-      toast.error(err.message || 'Signup failed');
-      throw err;
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+    await setDoc(doc(db, 'users', user.uid), { email: user.email, subscriptionStatus: 'inactive', subscriptionPlan: null, role: 'user', devices: [], subscriptionStart: null, subscriptionEnd: null }, { merge: true });
+    toast.success('Signup successful');
+    return userCredential;
+  };
+
+  const enforceDeviceLimit = async (user, plan) => {
+    const userDocRef = doc(db, 'users', user.uid);
+    const userDoc = await getDoc(userDocRef);
+    if (!userDoc.exists()) return;
+    const data = userDoc.data();
+    let deviceId = localStorage.getItem('deviceId');
+    if (!deviceId) {
+      deviceId = crypto.randomUUID();
+      localStorage.setItem('deviceId', deviceId);
+    }
+    const limit = planLimits[plan] || 1;
+    const devices = data.devices || [];
+    if (!devices.includes(deviceId)) {
+      if (devices.length >= limit) throw new Error('Device limit reached for your plan.');
+      else await updateDoc(userDocRef, { devices: arrayUnion(deviceId) });
     }
   };
 
   const login = async (email, password) => {
-    try {
-      const res = await signInWithEmailAndPassword(auth, email, password);
-      toast.success('Login successful');
-      return res;
-    } catch (err) {
-      toast.error(err.message || 'Login failed');
-      throw err;
-    }
+    const res = await signInWithEmailAndPassword(auth, email, password);
+    const userDocRef = doc(db, 'users', res.user.uid);
+    const userDoc = await getDoc(userDocRef);
+    const plan = userDoc.exists() ? userDoc.data().subscriptionPlan : null;
+    if (plan) await enforceDeviceLimit(res.user, plan);
+    toast.success('Login successful');
+    return res;
   };
 
   const logout = async () => {
-    try {
-      await signOut(auth);
-      toast.success('Logged out successfully');
-    } catch (err) {
-      toast.error(err.message || 'Logout failed');
-    }
+    await signOut(auth);
+    toast.success('Logged out successfully');
   };
 
   const resetPassword = async (email) => {
-    try {
-      await sendPasswordResetEmail(auth, email);
-      toast.success('Password reset email sent');
-    } catch (err) {
-      toast.error(err.message || 'Failed to send reset email');
-      throw err;
-    }
+    await sendPasswordResetEmail(auth, email);
+    toast.success('Password reset email sent');
   };
 
   const subscribeToPlan = async (planId) => {
-    try {
-      if (!currentUser) throw new Error('No user logged in');
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      await setDoc(userDocRef, { subscriptionPlan: planId, subscriptionStatus: 'active' }, { merge: true });
-      toast.success('Subscribed successfully');
-    } catch (err) {
-      toast.error(err.message || 'Failed to subscribe');
-      throw err;
-    }
+    if (!currentUser) throw new Error('No user logged in');
+    const userDocRef = doc(db, 'users', currentUser.uid);
+    const startDate = new Date();
+    const endDate = new Date();
+    endDate.setMonth(endDate.getMonth() + 1);
+    await setDoc(userDocRef, { subscriptionPlan: planId, subscriptionStatus: 'active', subscriptionStart: startDate, subscriptionEnd: endDate }, { merge: true });
+    toast.success('Subscribed successfully');
   };
 
   const unsubscribeFromPlan = async () => {
-    try {
-      if (!currentUser) throw new Error('No user logged in');
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      await setDoc(userDocRef, { subscriptionPlan: null, subscriptionStatus: 'inactive' }, { merge: true });
-      toast.success('Unsubscribed successfully');
-    } catch (err) {
-      toast.error(err.message || 'Failed to unsubscribe');
-      throw err;
-    }
+    if (!currentUser) throw new Error('No user logged in');
+    const userDocRef = doc(db, 'users', currentUser.uid);
+    await setDoc(userDocRef, { subscriptionPlan: null, subscriptionStatus: 'inactive' }, { merge: true });
+    toast.success('Unsubscribed successfully');
   };
 
   useEffect(() => {
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUser(user);
         const userDocRef = doc(db, 'users', user.uid);
         let unsubscribeFirestore;
-        try {
-          unsubscribeFirestore = onSnapshot(
-            userDocRef,
-            (docSnap) => {
-              if (docSnap.exists()) {
-                const data = docSnap.data();
-                setSubscriptionStatus(data.subscriptionStatus ?? 'inactive');
-                setSubscriptionPlan(data.subscriptionPlan ?? null);
-                setRole(data.role ?? 'user');
-              } else {
-                setSubscriptionStatus('inactive');
-                setSubscriptionPlan(null);
-                setRole('user');
-              }
-              setLoading(false);
-            },
-            (err) => {
-              console.error('Firestore snapshot error:', err);
-              toast.error('Failed to load user data');
-              setLoading(false);
-            }
-          );
-        } catch (err) {
-          console.error('Firestore listener failed:', err);
-          toast.error('Failed to load user data');
+        unsubscribeFirestore = onSnapshot(userDocRef, (docSnap) => {
+          const data = docSnap.exists() ? docSnap.data() : null;
+          const now = new Date();
+          if (data) {
+            const subEnd = data.subscriptionEnd?.toDate ? data.subscriptionEnd.toDate() : data.subscriptionEnd;
+            setSubscriptionStatus(subEnd && now > subEnd ? 'inactive' : data.subscriptionStatus ?? 'inactive');
+            setSubscriptionPlan(subEnd && now > subEnd ? null : data.subscriptionPlan ?? null);
+            setRole(data.role ?? 'user');
+
+            if (data.subscriptionEnd) {
+              const diffTime = subEnd - now;
+              setRemainingDays(Math.max(Math.ceil(diffTime / (1000 * 60 * 60 * 24)), 0));
+            } else setRemainingDays(null);
+
+            const maxDevices = planLimits[data.subscriptionPlan] || 1;
+            const usedDevices = data.devices?.length || 0;
+            setRemainingDevices(Math.max(maxDevices - usedDevices, 0));
+          } else {
+            setSubscriptionStatus('inactive');
+            setSubscriptionPlan(null);
+            setRole('user');
+            setRemainingDays(null);
+            setRemainingDevices(null);
+          }
           setLoading(false);
-        }
+        });
         return () => unsubscribeFirestore && unsubscribeFirestore();
       } else {
         setCurrentUser(null);
         setSubscriptionStatus(null);
         setSubscriptionPlan(null);
         setRole(null);
+        setRemainingDevices(null);
+        setRemainingDays(null);
         setLoading(false);
       }
     });
@@ -142,6 +143,8 @@ export const AuthProvider = ({ children }) => {
     subscriptionStatus,
     subscriptionPlan,
     role,
+    remainingDevices,
+    remainingDays,
     loading,
     signup,
     login,

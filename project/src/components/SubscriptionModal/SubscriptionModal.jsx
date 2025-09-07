@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CreditCard, CheckCircle } from 'lucide-react';
+import { X, CreditCard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -12,6 +12,7 @@ const SubscriptionModal = ({ isOpen, onClose, plan, onSubscribe }) => {
     expiry: '',
     cvv: ''
   });
+  const [expiryValid, setExpiryValid] = useState(true);
 
   const navigate = useNavigate();
 
@@ -37,12 +38,37 @@ const SubscriptionModal = ({ isOpen, onClose, plan, onSubscribe }) => {
     }
   };
 
+  const isExpiryValid = (expiry) => {
+    const [month, year] = expiry.split('/');
+    if (!month || !year || month.length !== 2 || year.length !== 2) return false;
+
+    const expMonth = parseInt(month, 10);
+    const expYear = parseInt(`20${year}`, 10);
+
+    if (expMonth < 1 || expMonth > 12) return false;
+
+    const today = new Date();
+    const expiryDate = new Date(expYear, expMonth - 1, 1);
+    const currentDate = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    return expiryDate >= currentDate;
+  };
+
   const handleSimulatedPayment = async (e) => {
     e.preventDefault();
+
+    const valid = isExpiryValid(cardDetails.expiry);
+    setExpiryValid(valid);
+
+    if (!valid) {
+      toast.error('Card is expired. Please enter a valid expiry date.');
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
-      await onSubscribe(plan.id); // simulate Firestore update
+      await onSubscribe(plan.id);
       toast.success(`Payment for ${plan.name} plan successful!`);
       navigate('/');
       onClose();
@@ -117,7 +143,7 @@ const SubscriptionModal = ({ isOpen, onClose, plan, onSubscribe }) => {
                 name="expiry"
                 value={cardDetails.expiry}
                 onChange={handleInputChange}
-                className="w-full p-3 rounded-lg bg-[#2a2a2a] text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-600"
+                className={`w-full p-3 rounded-lg bg-[#2a2a2a] text-white placeholder-gray-500 focus:outline-none focus:ring-2 ${expiryValid ? 'focus:ring-red-600' : 'border-2 border-red-600 ring-0'}`}
                 placeholder="MM/YY"
                 required
                 maxLength="5"

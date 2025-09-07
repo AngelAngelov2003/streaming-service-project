@@ -31,7 +31,7 @@ const NewPopular = () => {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen text-white text-center px-4">
         <h1 className="text-4xl sm:text-5xl font-extrabold">Access Denied</h1>
-        <p className="mt-4 text-lg sm:text-xl text-gray-400">You need an active subscription to view this content.</p>
+        <p className="mt-4 text-lg sm:text-xl text-gray-400">You need an active subscription to view New&Popular.</p>
         <button onClick={() => navigate('/subscribe')} className="mt-6 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors">
           Go to Subscription Plans
         </button>

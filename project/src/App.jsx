@@ -15,8 +15,8 @@ import SubscriptionPlans from './pages/SubscriptionPlans/SubscriptionPlans.jsx';
 import Account from './pages/Account/Account.jsx';
 import AdminPage from './pages/Admin/Admin.jsx';
 import Details from './pages/Details/Details.jsx';
+import FooterPage from './pages/FooterPage/FooterPage.jsx';
 import { SearchProvider } from "./components/SearchContext/SearchContext.jsx";
-
 
 function App() {
   const { currentUser, role, loading } = useAuth();
@@ -61,71 +61,16 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
-          <Route
-            path="/subscribe"
-            element={
-              <ProtectedRoute>
-                <SubscriptionPlans />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/subscribe" element={<ProtectedRoute><SubscriptionPlans /></ProtectedRoute>} />
           <Route path="/" element={<RootRedirect />} />
-          <Route
-            path="/tvshows"
-            element={
-              <ProtectedRoute>
-                <TvShows />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/movies"
-            element={
-              <ProtectedRoute>
-                <Movies />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/newpopular"
-            element={
-              <ProtectedRoute>
-                <NewPopular />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/mylist"
-            element={
-              <ProtectedRoute>
-                <List />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/account"
-            element={
-              <ProtectedRoute>
-                <Account />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin"
-            element={
-              <AdminRoute>
-                <AdminPage />
-              </AdminRoute>
-            }
-          />
-          <Route
-            path="/details/:id"
-            element={
-              <ProtectedRoute>
-                <Details />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/tvshows" element={<ProtectedRoute><TvShows /></ProtectedRoute>} />
+          <Route path="/movies" element={<ProtectedRoute><Movies /></ProtectedRoute>} />
+          <Route path="/newpopular" element={<ProtectedRoute><NewPopular /></ProtectedRoute>} />
+          <Route path="/mylist" element={<ProtectedRoute><List /></ProtectedRoute>} />
+          <Route path="/account" element={<ProtectedRoute><Account /></ProtectedRoute>} />
+          <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
+          <Route path="/details/:id" element={<ProtectedRoute><Details /></ProtectedRoute>} />
+          <Route path="/footer" element={<FooterPage />} />
         </Routes>
       </main>
       {currentUser && <Footer />}

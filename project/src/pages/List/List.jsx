@@ -13,34 +13,37 @@ const List = () => {
   const [userLikes, setUserLikes] = useState({});
   const [userList, setUserList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [subscriptionActive, setSubscriptionActive] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     if (!currentUser) return;
-
-    const fetchUserList = async () => {
+    const fetchUserData = async () => {
       setLoading(true);
       try {
+        const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          const now = new Date();
+          const subEnd = userData.subscriptionEnd?.toDate ? userData.subscriptionEnd.toDate() : userData.subscriptionEnd;
+          setSubscriptionActive(userData.subscriptionStatus === "active" && subEnd && subEnd > now);
+        }
         const listQuery = query(collection(db, "userLists"), where("userId", "==", currentUser.uid));
         const listSnap = await getDocs(listQuery);
         const movieIds = listSnap.docs.map((doc) => doc.data().movieId);
         setUserList(movieIds);
-
         if (movieIds.length === 0) {
           setMovies([]);
           setLoading(false);
           return;
         }
-
         const moviesPromises = movieIds.map(async (id) => {
           const docRef = doc(db, "moviesAndSeries", id);
           const docSnap = await getDoc(docRef);
           return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
         });
-
         const moviesData = (await Promise.all(moviesPromises)).filter(Boolean);
         setMovies(moviesData);
-
         const likesSnap = await getDocs(query(collection(db, "userLikes"), where("userId", "==", currentUser.uid)));
         const likesData = {};
         likesSnap.docs.forEach((doc) => {
@@ -53,19 +56,13 @@ const List = () => {
         setLoading(false);
       }
     };
-
-    fetchUserList();
+    fetchUserData();
   }, [currentUser]);
 
   const handleAddToList = async (movieId) => {
     if (!currentUser) return;
-
     if (userList.includes(movieId)) {
-      const listQuery = query(
-        collection(db, "userLists"),
-        where("userId", "==", currentUser.uid),
-        where("movieId", "==", movieId)
-      );
+      const listQuery = query(collection(db, "userLists"), where("userId", "==", currentUser.uid), where("movieId", "==", movieId));
       const listSnap = await getDocs(listQuery);
       listSnap.forEach(async (docSnap) => await deleteDoc(doc(db, "userLists", docSnap.id)));
       setUserList((prev) => prev.filter((id) => id !== movieId));
@@ -78,14 +75,8 @@ const List = () => {
 
   const handleToggleLike = async (movieId) => {
     if (!currentUser) return;
-
-    const likeRef = query(
-      collection(db, "userLikes"),
-      where("userId", "==", currentUser.uid),
-      where("movieId", "==", movieId)
-    );
+    const likeRef = query(collection(db, "userLikes"), where("userId", "==", currentUser.uid), where("movieId", "==", movieId));
     const snap = await getDocs(likeRef);
-
     if (!snap.empty) {
       const docId = snap.docs[0].id;
       const currentStatus = snap.docs[0].data().liked;
@@ -100,14 +91,8 @@ const List = () => {
 
   const handleToggleDislike = async (movieId) => {
     if (!currentUser) return;
-
-    const likeRef = query(
-      collection(db, "userLikes"),
-      where("userId", "==", currentUser.uid),
-      where("movieId", "==", movieId)
-    );
+    const likeRef = query(collection(db, "userLikes"), where("userId", "==", currentUser.uid), where("movieId", "==", movieId));
     const snap = await getDocs(likeRef);
-
     if (!snap.empty) {
       const docId = snap.docs[0].id;
       const currentStatus = snap.docs[0].data().liked;
@@ -123,7 +108,6 @@ const List = () => {
   const renderMovieCard = (movie) => {
     const isInList = userList.includes(movie.id);
     const likedStatus = userLikes[movie.id];
-
     return (
       <div key={movie.id} className="relative w-[160px] sm:w-[180px] md:w-[200px] lg:w-[220px] flex-shrink-0 cursor-pointer group">
         <div
@@ -162,8 +146,20 @@ const List = () => {
 
   if (!currentUser) return <div className="text-white text-center pt-20">Please log in to view your list.</div>;
   if (loading) return <div className="text-white text-center pt-20">Loading your list...</div>;
+  if (!subscriptionActive)
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen text-white text-center px-4">
+        <h1 className="text-4xl sm:text-5xl font-extrabold">Access Denied</h1>
+        <p className="mt-4 text-lg sm:text-xl text-gray-400">You need an active subscription to view your List.</p>
+        <button
+          onClick={() => navigate('/subscribe')}
+          className="mt-6 px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors"
+        >
+          Go to Subscription Plans
+        </button>
+      </div>
+    );
   if (filteredMovies.length === 0) return <div className="text-white text-center pt-20">No results found in your list.</div>;
-
   return (
     <div className="pt-16 px-6 text-white w-full">
       <h1 className="text-3xl font-bold mb-6">My List</h1>
